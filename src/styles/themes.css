@@ -1,0 +1,115 @@
+/* ============================================================
+ * mdread 主题系统 — 5 套命名主题
+ * 精简自 8 套, 移除 Nord/Solarized/GitHub(与浅色重复)
+ * 修复 Dracula/One Dark 的侧边栏与头部色差问题
+ * ============================================================ */
+
+/* === 浅色 (默认) === */
+:root, [data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f6f8fa;
+  --bg-sidebar: #f6f8fa;
+  --bg-hover: #eaeef2;
+  --bg-active: #ddf4ff;
+  --text-primary: #1f2328;
+  --text-secondary: #656d76;
+  --text-tertiary: #8b949e;
+  --border-color: #d1d9e0;
+  --accent-color: #0969da;
+  --accent-hover: #0550ae;
+  --code-bg: #f6f8fa;
+  --code-border: #e1e4e8;
+  --shadow: rgba(0, 0, 0, 0.08);
+  --scrollbar-thumb: #c0c4c8;
+  --scrollbar-track: transparent;
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace;
+}
+
+/* === 深色 === */
+[data-theme="dark"] {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-sidebar: #161b22;
+  --bg-hover: #1c2128;
+  --bg-active: #1a3045;
+  --text-primary: #e6edf3;
+  --text-secondary: #7d8590;
+  --text-tertiary: #6e7681;
+  --border-color: #30363d;
+  --accent-color: #2f81f7;
+  --accent-hover: #4493f8;
+  --code-bg: #161b22;
+  --code-border: #30363d;
+  --shadow: rgba(0, 0, 0, 0.3);
+  --scrollbar-thumb: #484f58;
+  --scrollbar-track: transparent;
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace;
+}
+
+/* === 护眼 (Sepia) === */
+[data-theme="sepia"] {
+  --bg-primary: #f8f1e3;
+  --bg-secondary: #f0e6d2;
+  --bg-sidebar: #f0e6d2;
+  --bg-hover: #e4d8c0;
+  --bg-active: #d8c9a0;
+  --text-primary: #5b4636;
+  --text-secondary: #8a7a6b;
+  --text-tertiary: #a89a8a;
+  --border-color: #d4c5a9;
+  --accent-color: #8b5e3c;
+  --accent-hover: #6d4828;
+  --code-bg: #f0e6d2;
+  --code-border: #d4c5a9;
+  --shadow: rgba(91, 70, 54, 0.12);
+  --scrollbar-thumb: #c4b394;
+  --scrollbar-track: transparent;
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', Georgia, serif;
+  --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace;
+}
+
+/* === Dracula === */
+[data-theme="dracula"] {
+  --bg-primary: #282a36;
+  --bg-secondary: #2d2f3d;
+  --bg-sidebar: #2d2f3d;
+  --bg-hover: #3a3d52;
+  --bg-active: #44475a;
+  --text-primary: #f8f8f2;
+  --text-secondary: #bcbcbc;
+  --text-tertiary: #6272a4;
+  --border-color: #3a3d52;
+  --accent-color: #bd93f9;
+  --accent-hover: #caa6ff;
+  --code-bg: #21222c;
+  --code-border: #3a3d52;
+  --shadow: rgba(0, 0, 0, 0.4);
+  --scrollbar-thumb: #44475a;
+  --scrollbar-track: transparent;
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+}
+
+/* === One Dark === */
+[data-theme="one-dark"] {
+  --bg-primary: #282c34;
+  --bg-secondary: #2c313a;
+  --bg-sidebar: #2c313a;
+  --bg-hover: #353b45;
+  --bg-active: #3e4451;
+  --text-primary: #abb2bf;
+  --text-secondary: #848a98;
+  --text-tertiary: #5c6370;
+  --border-color: #353b45;
+  --accent-color: #61afef;
+  --accent-hover: #7dc3ff;
+  --code-bg: #2c313a;
+  --code-border: #353b45;
+  --shadow: rgba(0, 0, 0, 0.3);
+  --scrollbar-thumb: #3e4451;
+  --scrollbar-track: transparent;
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+}

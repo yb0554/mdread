@@ -1,0 +1,81 @@
+/* ============================================================
+ * mdread 语法高亮主题 — 自定义配色
+ * 引用主题变量, 5 套主题自适应
+ * ============================================================ */
+
+.hljs {
+  color: var(--text-primary);
+  background: transparent;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-type {
+  color: var(--accent-color);
+  font-weight: 500;
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+  color: #7ee787;
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+  color: #f0883e;
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-name,
+.hljs-attribute {
+  color: #79c0ff;
+}
+
+.hljs-variable,
+.hljs-template-variable,
+.hljs-deletion {
+  color: #ffa657;
+}
+
+.hljs-meta,
+.hljs-built_in {
+  color: var(--text-secondary);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 700;
+}
+
+/* 深色主题下调整部分颜色 */
+[data-theme="dark"] .hljs-string,
+[data-theme="dracula"] .hljs-string,
+[data-theme="one-dark"] .hljs-string {
+  color: #a5d6a7;
+}
+
+[data-theme="dark"] .hljs-number,
+[data-theme="dracula"] .hljs-number,
+[data-theme="one-dark"] .hljs-number {
+  color: #ff9e64;
+}
+
+[data-theme="dark"] .hljs-title,
+[data-theme="dracula"] .hljs-title,
+[data-theme="one-dark"] .hljs-title {
+  color: #82b1ff;
+}

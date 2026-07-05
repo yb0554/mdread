@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>mdread - Markdown 阅读器</title>
+    <link rel="stylesheet" href="/src/styles/themes.css" />
+    <link rel="stylesheet" href="/src/styles/main.css" />
+    <link rel="stylesheet" href="/src/styles/sidebar.css" />
+    <link rel="stylesheet" href="/src/styles/markdown.css" />
+    <link rel="stylesheet" href="/src/styles/outline.css" />
+    <link rel="stylesheet" href="/src/styles/highlight.css" />
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar">
+        <div id="sidebar-header">
+          <button id="menu-btn" title="菜单">
+            <span class="btn-icon">≡</span>
+          </button>
+          <div id="menu-popup" class="hidden"></div>
+          <input id="file-search" type="search" placeholder="搜索文件..." />
+        </div>
+        <div id="recent-files"></div>
+        <div id="file-tree"></div>
+      </aside>
+      <div id="sidebar-resizer"></div>
+      <main id="content">
+        <div id="empty-state">
+          <div class="empty-icon">📄</div>
+          <p class="empty-title">请选择一个 Markdown 文件</p>
+          <p class="empty-hint">点击左上角 ≡ 菜单 → 添加文件夹</p>
+        </div>
+        <article id="markdown-content" class="hidden"></article>
+      </main>
+      <div id="reading-progress"></div>
+      <aside id="outline" class="hidden">
+        <div id="outline-header">
+          <span class="outline-title">目录</span>
+          <button id="outline-close" title="收起目录">×</button>
+        </div>
+        <nav id="outline-tree"></nav>
+      </aside>
+    </div>
+  </body>
+</html>

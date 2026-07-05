@@ -1,0 +1,144 @@
+/* ============================================================
+ * mdread 基础布局 — 全局重置 + Flexbox 布局
+ * ============================================================ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-family);
+  font-size: calc(15px * var(--font-scale, 1));
+  line-height: var(--line-height, 1.6);
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+#app {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+}
+
+/* === 侧边栏 === */
+#sidebar {
+  width: 260px;
+  min-width: 200px;
+  max-width: 500px;
+  background-color: var(--bg-sidebar);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+#sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* === 拖拽分隔条 === */
+#sidebar-resizer {
+  width: 4px;
+  cursor: col-resize;
+  background-color: transparent;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+
+#sidebar-resizer:hover {
+  background-color: var(--accent-color);
+}
+
+/* === 主内容区 === */
+#content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  background-color: var(--bg-primary);
+  transition: background-color 0.3s ease;
+}
+
+/* === 空状态 === */
+#empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  text-align: center;
+  user-select: none;
+}
+
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.empty-hint {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* === Markdown 内容容器 === */
+#markdown-content {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 40px 48px;
+  min-height: 100%;
+}
+
+/* === 滚动条 === */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* === 选中文本 === */
+::selection {
+  background-color: var(--accent-color);
+  color: #ffffff;
+}
+
+/* === 拖拽视觉反馈 === */
+#content.drag-over {
+  outline: 2px dashed var(--accent-color);
+  outline-offset: -4px;
+}
