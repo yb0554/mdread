@@ -6,7 +6,7 @@ mdread 不编辑、只阅读。所有文件操作均为只读，配合 DOMPurify
 
 ## 界面预览
 
-![mdread 界面预览](screenshots/01-app-overview.png)
+![mdread 界面预览](screenshots/01-app-overview-v2.png)
 
 ## 功能特性
 
