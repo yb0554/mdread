@@ -6,13 +6,7 @@ mdread 不编辑、只阅读。所有文件操作均为只读，配合 DOMPurify
 
 ## 界面预览
 
-### 应用主界面
-
-![应用主界面](screenshots/01-app-overview.png)
-
-### 菜单与主题切换
-
-![菜单与主题切换](screenshots/02-menu-themes.png)
+![mdread 界面预览](screenshots/01-app-overview.png)
 
 ## 功能特性
 
