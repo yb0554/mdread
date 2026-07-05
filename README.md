@@ -4,6 +4,16 @@
 
 mdread 不编辑、只阅读。所有文件操作均为只读，配合 DOMPurify 净化与 CSP 策略，提供安全、纯净的桌面阅读体验。
 
+## 界面预览
+
+### 应用主界面
+
+![应用主界面](screenshots/01-app-overview.png)
+
+### 菜单与主题切换
+
+![菜单与主题切换](screenshots/02-menu-themes.png)
+
 ## 功能特性
 
 ### 阅读体验

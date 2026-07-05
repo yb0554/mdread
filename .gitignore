@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Release build artifacts staging
+release-assets/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
