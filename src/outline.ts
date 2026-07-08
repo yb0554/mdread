@@ -8,11 +8,11 @@
  */
 
 import { onContentRendered } from './renderer';
+import { StorageKeys, getString, setString } from './storage';
 
 // 模块级状态
 let scrollSpy: IntersectionObserver | null = null;
 let progressRaf: number | null = null;
-const OUTLINE_KEY = 'mdread-outline-visible';
 
 /**
  * 初始化大纲模块 — 在 main.ts DOMContentLoaded 中调用
@@ -28,7 +28,7 @@ export function initOutline(): void {
   }
 
   // 恢复持久化状态
-  const visible = localStorage.getItem(OUTLINE_KEY);
+  const visible = getString(StorageKeys.OUTLINE_VISIBLE);
   if (visible === 'true') {
     const panel = document.getElementById('outline');
     if (panel) {
@@ -197,7 +197,7 @@ function clearOutline(): void {
 /**
  * 切换大纲显示/隐藏
  */
-function toggleOutline(force?: boolean): void {
+export function toggleOutline(force?: boolean): void {
   const panel = document.getElementById('outline');
   if (!panel) return;
 
@@ -209,7 +209,7 @@ function toggleOutline(force?: boolean): void {
     panel.classList.add('hidden');
   }
 
-  localStorage.setItem(OUTLINE_KEY, String(shouldShow));
+  setString(StorageKeys.OUTLINE_VISIBLE, String(shouldShow));
 }
 
 /**

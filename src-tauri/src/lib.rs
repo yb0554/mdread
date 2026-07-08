@@ -1,6 +1,10 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::collections::HashMap;
 use serde::Serialize;
+use tauri::{Manager, Emitter};
+use notify::{Watcher, RecursiveMode, EventKind};
 
 /// 文件条目结构体 — 前端文件树渲染所需信息
 #[derive(Serialize)]
@@ -14,7 +18,11 @@ struct FileEntry {
 /// 列出目录内容 (仅 .md/.markdown 文件和子目录)
 /// 天然只读: 仅读取目录, 不涉及任何写操作
 #[tauri::command]
-fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
+fn list_directory(path: String, app: tauri::AppHandle) -> Result<Vec<FileEntry>, String> {
+    // 安全收紧: 动态授予该目录的 asset 协议访问权限 (递归)
+    // 仅用户显式打开的目录才被授权, 而非整个文件系统
+    let _ = app.asset_protocol_scope().allow_directory(PathBuf::from(&path), true);
+
     let entries = fs::read_dir(&path).map_err(|e| format!("无法读取目录: {}", e))?;
     let mut result = Vec::new();
 
@@ -75,8 +83,13 @@ fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
 /// 读取文件内容 (仅限 .md/.markdown 文件)
 /// 天然只读: 仅读取文件内容, 不涉及任何写操作
 #[tauri::command]
-fn read_file(path: String) -> Result<String, String> {
+fn read_file(path: String, app: tauri::AppHandle) -> Result<String, String> {
     let path = Path::new(&path);
+
+    // 授予文件所在目录的 asset 访问权限 (用于加载 Markdown 中的相对路径图片)
+    if let Some(parent) = path.parent() {
+        let _ = app.asset_protocol_scope().allow_directory(parent.to_path_buf(), true);
+    }
 
     // 验证文件扩展名 — 安全防线
     let ext = path
@@ -103,11 +116,55 @@ fn read_file(path: String) -> Result<String, String> {
     Ok(content)
 }
 
+/// 文件监听器状态 — 存储每个路径对应的 watcher
+type WatcherMap = Mutex<HashMap<String, notify::RecommendedWatcher>>;
+
+/// 监听文件变更 — 当文件被外部编辑器修改时通知前端自动刷新
+/// 替换同一文件的旧监听器, 旧 watcher drop 时线程自动退出
+#[tauri::command]
+fn watch_file(
+    path: String,
+    app: tauri::AppHandle,
+    state: tauri::State<WatcherMap>,
+) -> Result<(), String> {
+    let app_handle = app.clone();
+    let path_clone = path.clone();
+
+    let (tx, rx) = std::sync::mpsc::channel::<()>();
+
+    let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
+        if let Ok(event) = res {
+            if matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
+                let _ = tx.send(());
+            }
+        }
+    }).map_err(|e| format!("无法创建文件监听器: {}", e))?;
+
+    watcher.watch(std::path::Path::new(&path), RecursiveMode::NonRecursive)
+        .map_err(|e| format!("无法监听文件: {}", e))?;
+
+    // 替换旧监听器 (drop 时释放 tx, 线程自动退出)
+    {
+        let mut map = state.lock().unwrap();
+        map.insert(path, watcher);
+    }
+
+    // 独立线程转发变更事件到前端
+    std::thread::spawn(move || {
+        while rx.recv().is_ok() {
+            let _ = app_handle.emit("file-changed", &path_clone);
+        }
+    });
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![list_directory, read_file])
+        .manage(Mutex::new(HashMap::new()) as WatcherMap)
+        .invoke_handler(tauri::generate_handler![list_directory, read_file, watch_file])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

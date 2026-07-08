@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "mdread",
   "version": "1.0.0",
-  "identifier": "com.mdread.app",
+  "identifier": "com.mdread.reader"
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -26,13 +26,13 @@
       "csp": "default-src 'self'; style-src 'self'; img-src 'self' data: https: asset:; script-src 'self'",
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": []
       }
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": "all",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -43,6 +43,14 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "linux": {
+      "deb": {
+        "depends": []
       }
     }
   }

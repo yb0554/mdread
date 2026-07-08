@@ -7,6 +7,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { StorageKeys, getJSON, setJSON, getString, remove } from './storage';
 
 interface FileEntry {
   name: string;
@@ -17,7 +18,6 @@ interface FileEntry {
 
 const dirCache = new Map<string, FileEntry[]>();
 let onFileSelectCallback: ((path: string) => void) | null = null;
-const FOLDERS_KEY = 'mdread-folders';
 
 /**
  * 打开文件夹选择对话框, 添加到列表
@@ -42,30 +42,26 @@ export async function pickFolder(): Promise<string | null> {
  * 获取已保存的文件夹列表
  */
 export function getFolders(): string[] {
-  try {
-    const data = localStorage.getItem(FOLDERS_KEY);
-    if (data) {
-      return JSON.parse(data);
-    }
-    // 迁移旧版单文件夹键
-    const legacy = localStorage.getItem('mdread-last-folder');
-    if (legacy) {
-      const folders = [legacy];
-      saveFolders(folders);
-      localStorage.removeItem('mdread-last-folder');
-      return folders;
-    }
-    return [];
-  } catch {
-    return [];
+  const folders = getJSON<string[] | null>(StorageKeys.FOLDERS, null);
+  if (folders) {
+    return folders;
   }
+  // 迁移旧版单文件夹键
+  const legacy = getString(StorageKeys.LEGACY_FOLDER);
+  if (legacy) {
+    const migrated = [legacy];
+    setJSON(StorageKeys.FOLDERS, migrated);
+    remove(StorageKeys.LEGACY_FOLDER);
+    return migrated;
+  }
+  return [];
 }
 
 /**
  * 保存文件夹列表
  */
 function saveFolders(folders: string[]): void {
-  localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders));
+  setJSON(StorageKeys.FOLDERS, folders);
 }
 
 /**

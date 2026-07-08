@@ -27,4 +27,10 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  // 4. 生产构建优化 — Tauri webview 支持现代 JS, 无需兼容降级
+  build: {
+    target: 'esnext',
+    cssCodeSplit: false,
+    sourcemap: false,
+  },
 }));

@@ -6,11 +6,12 @@
 import { initTheme, setTheme, getCurrentTheme, getThemeOptions, setFont, getCurrentFont, getFontOptions } from './theme';
 import { pickFolder, renderFileTree, appendFolder, onFileSelect, getFolders } from './filetree';
 import { loadFile } from './renderer';
-import { initOutline } from './outline';
+import { initOutline, toggleOutline } from './outline';
 import { initShortcuts } from './shortcuts';
 import { initSearch } from './search';
 import { initRecent, addRecent, clearRecent } from './recent';
 import { initDragDrop } from './dragdrop';
+import { initHistory, pushHistory } from './history';
 
 window.addEventListener('DOMContentLoaded', async () => {
   initTheme();
@@ -22,6 +23,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   onFileSelect((path) => {
     loadFile(path);
     addRecent(path);
+    pushHistory(path);
   });
 
   // 恢复已保存的文件夹列表
@@ -32,8 +34,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   setupSidebarResizer();
   initOutline();
   initShortcuts();
-  initRecent((p) => loadFile(p));
-  initDragDrop((p) => loadFile(p));
+  initHistory((p) => loadFile(p));
+  initRecent((p) => { loadFile(p); pushHistory(p); });
+  initDragDrop((p) => { loadFile(p); pushHistory(p); });
 });
 
 // === 统一菜单 ===
@@ -67,13 +70,7 @@ function buildMenuContent(popup: HTMLElement): void {
 
   // 显示/隐藏目录
   popup.appendChild(createMenuItem('☰ 显示/隐藏目录', () => {
-    document.getElementById('outline-toggle-btn')?.click();
-    // 如果按钮不存在, 直接操作 outline
-    const outline = document.getElementById('outline');
-    if (outline) {
-      outline.classList.toggle('hidden');
-      localStorage.setItem('mdread-outline-visible', String(!outline.classList.contains('hidden')));
-    }
+    toggleOutline();
   }));
 
   // 分隔线
@@ -122,7 +119,7 @@ function createMenuItem(text: string, onClick: () => void): HTMLElement {
   item.addEventListener('click', (e) => {
     e.stopPropagation();
     onClick();
-    popup_hide();
+    hidePopup();
   });
   return item;
 }
@@ -136,7 +133,7 @@ function createMenuOption(text: string, active: boolean, onClick: () => void): H
     onClick();
     const popup = document.getElementById('menu-popup')!;
     rebuildMenu(popup);
-    popup_hide();
+    hidePopup();
   });
   return item;
 }
@@ -154,7 +151,7 @@ function createMenuSeparator(): HTMLElement {
   return sep;
 }
 
-function popup_hide(): void {
+function hidePopup(): void {
   document.getElementById('menu-popup')?.classList.add('hidden');
 }
 

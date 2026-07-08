@@ -4,7 +4,8 @@
  * - 支持清空全部 + 单项移除
  */
 
-const RECENT_KEY = 'mdread-recent-files';
+import { StorageKeys, getJSON, setJSON, remove } from './storage';
+
 const MAX_RECENT = 10;
 
 let onOpenCallback: ((path: string) => void) | null = null;
@@ -20,30 +21,25 @@ export function addRecent(path: string): void {
   recent = recent.filter(f => f !== path);
   recent.unshift(path);
   recent = recent.slice(0, MAX_RECENT);
-  localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
+  setJSON(StorageKeys.RECENT_FILES, recent);
   expanded = false;
   renderRecent();
 }
 
 export function removeRecent(path: string): void {
   let recent = getRecent().filter(f => f !== path);
-  localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
+  setJSON(StorageKeys.RECENT_FILES, recent);
   renderRecent();
 }
 
 export function clearRecent(): void {
-  localStorage.removeItem(RECENT_KEY);
+  remove(StorageKeys.RECENT_FILES);
   expanded = false;
   renderRecent();
 }
 
 function getRecent(): string[] {
-  try {
-    const data = localStorage.getItem(RECENT_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
+  return getJSON<string[]>(StorageKeys.RECENT_FILES, []);
 }
 
 function renderRecent(): void {
