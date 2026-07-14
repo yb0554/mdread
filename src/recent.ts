@@ -1,11 +1,14 @@
-/** Recent documents with fully keyboard-accessible controls. */
+/** Recent documents with compact labels, keyboard support, and path actions. */
 
 import { StorageKeys, getJSON, setJSON, remove } from './storage';
+import { formatDisplayPath, getPathFileName } from './path-display';
 
 const MAX_RECENT = 10;
 
 let onOpenCallback: ((path: string) => void) | null = null;
 let expanded = false;
+let contextMenu: HTMLElement | null = null;
+let contextEventsBound = false;
 
 function createButton(text: string, className: string, label: string): HTMLButtonElement {
   const button = document.createElement('button');
@@ -19,6 +22,7 @@ function createButton(text: string, className: string, label: string): HTMLButto
 
 export function initRecent(onOpen: (path: string) => void): void {
   onOpenCallback = onOpen;
+  bindContextMenuEvents();
   renderRecent();
 }
 
@@ -39,11 +43,23 @@ export function removeRecent(path: string): void {
 export function clearRecent(): void {
   remove(StorageKeys.RECENT_FILES);
   expanded = false;
+  hideRecentContextMenu();
   renderRecent();
 }
 
 function getRecent(): string[] {
   return getJSON<string[]>(StorageKeys.RECENT_FILES, []);
+}
+
+function bindContextMenuEvents(): void {
+  if (contextEventsBound) return;
+  contextEventsBound = true;
+  document.addEventListener('pointerdown', (event) => {
+    if (contextMenu && !contextMenu.contains(event.target as Node)) hideRecentContextMenu();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') hideRecentContextMenu();
+  });
 }
 
 function renderRecent(): void {
@@ -69,19 +85,31 @@ function renderRecent(): void {
     const item = document.createElement('div');
     item.className = 'recent-item';
 
-    const openButton = createButton('', 'recent-open-btn', `打开最近文件：${path}`);
+    const displayPath = formatDisplayPath(path);
+    const fileName = getPathFileName(path);
+    const openButton = createButton('', 'recent-open-btn', `打开最近文件：${fileName}。右键可复制完整路径`);
     const icon = document.createElement('span');
     icon.className = 'recent-icon';
     icon.textContent = '📄';
     icon.setAttribute('aria-hidden', 'true');
     const label = document.createElement('span');
     label.className = 'recent-label';
-    label.textContent = path.split(/[\/]/).pop() || path;
-    label.title = path;
+    label.textContent = fileName;
+    label.title = displayPath;
     openButton.append(icon, label);
     openButton.addEventListener('click', () => onOpenCallback?.(path));
+    openButton.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      showRecentContextMenu(displayPath, event.clientX, event.clientY);
+    });
+    openButton.addEventListener('keydown', (event) => {
+      if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+      event.preventDefault();
+      const bounds = openButton.getBoundingClientRect();
+      showRecentContextMenu(displayPath, bounds.left + 12, bounds.bottom + 4);
+    });
 
-    const removeButton = createButton('×', 'recent-remove-btn', `从最近文件中移除：${path}`);
+    const removeButton = createButton('×', 'recent-remove-btn', `从最近文件中移除：${fileName}`);
     removeButton.addEventListener('click', () => removeRecent(path));
     item.append(openButton, removeButton);
     container.appendChild(item);
@@ -96,4 +124,53 @@ function renderRecent(): void {
     });
     container.appendChild(toggle);
   }
+}
+
+function showRecentContextMenu(displayPath: string, x: number, y: number): void {
+  hideRecentContextMenu();
+  const menu = document.createElement('div');
+  menu.className = 'recent-context-menu';
+  menu.setAttribute('role', 'menu');
+  menu.setAttribute('aria-label', '最近文件操作');
+  menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - 236))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - 52))}px`;
+
+  const copyButton = createButton('复制完整路径', 'recent-context-menu-item', '复制完整文件路径');
+  copyButton.setAttribute('role', 'menuitem');
+  copyButton.addEventListener('click', () => {
+    void copyPath(displayPath).then(() => {
+      copyButton.textContent = '已复制路径';
+      window.setTimeout(hideRecentContextMenu, 600);
+    });
+  });
+  menu.appendChild(copyButton);
+  document.body.appendChild(menu);
+  contextMenu = menu;
+  copyButton.focus();
+}
+
+async function copyPath(path: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(path);
+      return;
+    } catch {
+      // Fall back for WebView environments without Clipboard API permission.
+    }
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = path;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  textarea.remove();
+}
+
+function hideRecentContextMenu(): void {
+  contextMenu?.remove();
+  contextMenu = null;
 }

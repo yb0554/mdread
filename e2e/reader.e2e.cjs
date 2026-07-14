@@ -32,7 +32,13 @@ describe('mdread desktop reader', () => {
   });
 
   it('renders every outline heading once inside a clipped, scrollable panel', async () => {
-    await browser.waitUntil(async () => (await $$('#outline-tree .outline-item')).length > 0);
+    await browser.waitUntil(() => browser.execute(() => document.querySelectorAll('#outline-tree .outline-item').length > 0));
+    await browser.waitUntil(() => browser.execute(() => {
+      const tree = document.getElementById('outline-tree');
+      return Boolean(tree && tree.getBoundingClientRect().width > 0 && tree.clientHeight > 0);
+    }), {
+      timeoutMsg: 'The outline panel did not receive a usable layout.',
+    });
 
     const metrics = await browser.execute(() => {
       const tree = document.getElementById('outline-tree');
@@ -55,7 +61,6 @@ describe('mdread desktop reader', () => {
         longItemTextOverflow: getComputedStyle(longItem).textOverflow,
       };
     });
-
     expect(metrics.itemCount).toBe(metrics.headingCount);
     expect(metrics.targetCount).toBe(metrics.headingCount);
     expect(metrics.overflowY).toBe('scroll');
@@ -130,19 +135,29 @@ describe('mdread desktop reader', () => {
     await browser.setWindowSize(1000, 700);
   });
 
-  it('exposes the reading commands through the accessible menu', async () => {
+  it('exposes common actions directly and groups secondary reading commands', async () => {
+    const favoriteButton = await $('#favorite-toggle-btn');
+    expect(await favoriteButton.isEnabled()).toBe(true);
+    expect(await favoriteButton.getAttribute('aria-pressed')).toBe('false');
+    await favoriteButton.click();
+    expect(await favoriteButton.getAttribute('aria-pressed')).toBe('true');
+    await favoriteButton.click();
+    expect(await favoriteButton.getAttribute('aria-pressed')).toBe('false');
+
     const menuButton = await $('#menu-btn');
     await menuButton.click();
 
     const menu = await $('#menu-popup');
     await expect(menu).not.toHaveElementClass('hidden');
+    expect(await menu.getAttribute('role')).toBe('dialog');
 
     const labels = await browser.execute(() => Array.from(
-      document.querySelectorAll('#menu-popup [role="menuitem"]'),
+      document.querySelectorAll('#menu-popup button'),
       (item) => item.textContent?.trim() || '',
     ));
-    expect(labels).toContain('🖨 打印 / 导出 PDF');
-    expect(labels).toContain('📂 在文件管理器中显示当前文档');
+    expect(labels).toContain('打印 / 导出 PDF');
+    expect(labels).toContain('在文件管理器中显示');
+    expect(await $('#menu-popup .menu-disclosure summary').getText()).toContain('外观');
   });
 
   it('forwards a document from a second system launch to the active instance', async () => {

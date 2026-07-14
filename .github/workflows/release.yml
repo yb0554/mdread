@@ -79,8 +79,8 @@ jobs:
           releaseBody: |
             ## mdread ${{ github.ref_name }}
 
-            - Stability fixes for document authorization, rapid document switching, cancellable search, file-tree truncation, and responsive outline navigation.
-            - Supported local Markdown extensions: `.md` and `.markdown`.
+            - Update details are in `CHANGELOG.md`.
+            - Windows releases include an installer and a portable executable (`mdread_*_x64-portable.exe`).
             - This Windows release is unsigned because no code-signing certificate is configured. Verify downloads with the attached `SHA256SUMS.txt`.
 
             Source-level details: `CHANGELOG.md`.
@@ -93,6 +93,14 @@ jobs:
         with:
           name: bundle-${{ matrix.platform }}
           path: src-tauri/target/release/bundle
+          if-no-files-found: error
+
+      - name: Archive Windows portable executable
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-windows
+          path: src-tauri/target/release/mdread.exe
           if-no-files-found: error
 
   provenance:
@@ -114,6 +122,13 @@ jobs:
           pattern: bundle-*
           path: release-assets/bundles
           merge-multiple: true
+      - name: Download Windows portable executable
+        uses: actions/download-artifact@v4
+        with:
+          name: portable-windows
+          path: release-assets/portable
+      - name: Name Windows portable executable
+        run: mv release-assets/portable/mdread.exe release-assets/portable/mdread_${{ github.ref_name }}_x64-portable.exe
       - name: Generate SBOM and SHA-256 manifest
         run: |
           npm run generate:sbom
@@ -125,6 +140,7 @@ jobs:
           draft: true
           files: |
             release-assets/*.cdx.json
+            release-assets/portable/*.exe
             release-assets/SHA256SUMS.txt
       - name: Archive provenance files
         uses: actions/upload-artifact@v4
