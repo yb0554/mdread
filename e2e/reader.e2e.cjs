@@ -1,3 +1,10 @@
+const path = require('node:path');
+const { spawn } = require('node:child_process');
+
+const executable = process.platform === 'win32' ? 'mdread.exe' : 'mdread';
+const appBinaryPath = process.env.APP_BINARY
+  || path.resolve(__dirname, '..', 'src-tauri', 'target', 'debug', executable);
+const secondLaunchFixture = path.resolve(__dirname, 'fixtures', '快速切换-B.markdown');
 describe('mdread desktop reader', () => {
   async function registerFixtureWorkspace() {
     await browser.execute(() => {
@@ -136,5 +143,40 @@ describe('mdread desktop reader', () => {
     ));
     expect(labels).toContain('🖨 打印 / 导出 PDF');
     expect(labels).toContain('📂 在文件管理器中显示当前文档');
+  });
+
+  it('forwards a document from a second system launch to the active instance', async () => {
+    const secondLaunch = spawn(appBinaryPath, [secondLaunchFixture], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        secondLaunch.kill();
+        reject(new Error('The second mdread launch did not exit after forwarding the document.'));
+      }, 15_000);
+      secondLaunch.once('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      secondLaunch.once('exit', (code) => {
+        clearTimeout(timeout);
+        if (code !== 0) {
+          reject(new Error(`The second mdread launch exited with code ${code}.`));
+          return;
+        }
+        resolve();
+      });
+    });
+
+    await browser.waitUntil(async () => browser.execute(() => {
+      const heading = document.querySelector('#markdown-content h1')?.textContent;
+      const metadata = document.getElementById('document-meta')?.textContent || '';
+      return heading === '文档 B' && metadata.includes('快速切换-B.markdown');
+    }), {
+      timeout: 15_000,
+      timeoutMsg: 'The active instance did not open the document forwarded by the second launch.',
+    });
   });
 });

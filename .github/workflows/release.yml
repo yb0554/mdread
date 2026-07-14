@@ -64,10 +64,10 @@ jobs:
         if: matrix.platform == 'windows-latest'
         run: npm run test:e2e
 
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
       - name: RustSec audit
-        uses: rustsec/audit-check@v1.4.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        run: cargo audit --file src-tauri/Cargo.lock
 
       - name: Build and release Tauri app
         uses: tauri-apps/tauri-action@v0
