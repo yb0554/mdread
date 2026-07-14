@@ -1,71 +1,33 @@
-/**
- * mdread 文件搜索过滤
- * 在侧边栏搜索框中输入关键词, 过滤已加载的文件树节点
- */
+/** Debounced workspace search. Prefix with `content:` to scan Markdown contents. */
+
+import { searchWorkspaces } from './filetree';
 
 let debounceTimer: number | null = null;
+
+function parseQuery(value: string): { query: string; mode: 'filename' | 'content' } {
+  const contentQuery = value.match(/^content:\s*(.*)$/i);
+  return contentQuery
+    ? { query: contentQuery[1], mode: 'content' }
+    : { query: value, mode: 'filename' };
+}
 
 export function initSearch(): void {
   const input = document.getElementById('file-search') as HTMLInputElement | null;
   if (!input) return;
-
+  input.title = '按文件名搜索；输入 content: 关键词 可扫描 Markdown 正文';
   input.addEventListener('input', () => {
-    if (debounceTimer !== null) {
-      clearTimeout(debounceTimer);
-    }
+    if (debounceTimer !== null) window.clearTimeout(debounceTimer);
     debounceTimer = window.setTimeout(() => {
-      filterTree(input.value.trim().toLowerCase());
+      const { query, mode } = parseQuery(input.value);
+      void searchWorkspaces(query, mode);
       debounceTimer = null;
-    }, 300);
+    }, 250);
   });
-}
-
-function filterTree(query: string): void {
-  const fileTree = document.getElementById('file-tree');
-  if (!fileTree) return;
-
-  if (!query) {
-    fileTree.querySelectorAll<HTMLElement>('.tree-node, .tree-root, .tree-children').forEach(el => {
-      el.style.display = '';
-    });
-    return;
-  }
-
-  const roots = fileTree.querySelectorAll('.tree-root');
-  roots.forEach(root => {
-    const hasMatch = filterNode(root as HTMLElement, query);
-    (root as HTMLElement).style.display = hasMatch ? '' : 'none';
-  });
-}
-
-function filterNode(element: HTMLElement, query: string): boolean {
-  let hasMatch = false;
-  const children = element.children;
-
-  for (let i = 0; i < children.length; i++) {
-    const child = children[i] as HTMLElement;
-
-    if (child.classList.contains('tree-node')) {
-      const label = child.querySelector('.tree-label');
-      const text = label?.textContent?.toLowerCase() || '';
-      const isFile = child.classList.contains('file');
-
-      if (isFile) {
-        const match = text.includes(query);
-        child.style.display = match ? '' : 'none';
-        if (match) hasMatch = true;
-      } else {
-        // 文件夹: 递归检查子节点
-        const childHasMatch = filterNode(child, query);
-        child.style.display = childHasMatch ? '' : 'none';
-        if (childHasMatch) hasMatch = true;
-      }
-    } else if (child.classList.contains('tree-children')) {
-      const childHasMatch = filterNode(child, query);
-      child.style.display = childHasMatch ? '' : 'none';
-      if (childHasMatch) hasMatch = true;
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      input.value = '';
+      void searchWorkspaces('');
+      input.blur();
     }
-  }
-
-  return hasMatch;
+  });
 }

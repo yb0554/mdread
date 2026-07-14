@@ -1,271 +1,243 @@
-/**
- * mdread 文档大纲模块
- * - 从渲染后的 HTML 提取标题层级
- * - 右侧面板显示目录树
- * - 点击跳转 + 滚动高亮 (IntersectionObserver)
- * - 代码块复制按钮
- * - 阅读进度条
- */
+/** Accessible outline, code copying and reading progress. */
 
 import { onContentRendered } from './renderer';
-import { StorageKeys, getString, setString } from './storage';
+import { getString, setString, StorageKeys } from './storage';
 
-// 模块级状态
 let scrollSpy: IntersectionObserver | null = null;
 let progressRaf: number | null = null;
+let cancelScheduledBuild: (() => void) | null = null;
+let outlineInitialized = false;
+let outlineBuildRequest = 0;
+let hasOutline = false;
+let mobileDrawerOpen = false;
 
-/**
- * 初始化大纲模块 — 在 main.ts DOMContentLoaded 中调用
- */
-export function initOutline(): void {
-  // 注册渲染完成回调
-  onContentRendered(buildOutline);
+const narrowLayout = window.matchMedia('(max-width: 960px)');
 
-  // 绑定关闭按钮
-  const closeBtn = document.getElementById('outline-close');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', () => toggleOutline(false));
+type IdleDeadlineLike = { didTimeout: boolean; timeRemaining: () => number };
+type IdleWindow = Window & {
+  requestIdleCallback?: (callback: (deadline: IdleDeadlineLike) => void, options?: { timeout?: number }) => number;
+  cancelIdleCallback?: (handle: number) => void;
+};
+
+function scheduleIdle(callback: (deadline: IdleDeadlineLike) => void): () => void {
+  const idleWindow = window as IdleWindow;
+  if (idleWindow.requestIdleCallback) {
+    const handle = idleWindow.requestIdleCallback(callback, { timeout: 450 });
+    return () => idleWindow.cancelIdleCallback?.(handle);
   }
-
-  // 恢复持久化状态
-  const visible = getString(StorageKeys.OUTLINE_VISIBLE);
-  if (visible === 'true') {
-    const panel = document.getElementById('outline');
-    if (panel) {
-      panel.classList.remove('hidden');
-    }
-  }
-
-  // 阅读进度条
-  const content = document.getElementById('content');
-  if (content) {
-    content.addEventListener('scroll', () => {
-      if (progressRaf !== null) return;
-      progressRaf = requestAnimationFrame(() => {
-        updateReadingProgress();
-        progressRaf = null;
-      });
-    });
-  }
+  const handle = window.setTimeout(() => callback({ didTimeout: true, timeRemaining: () => 0 }), 0);
+  return () => window.clearTimeout(handle);
 }
 
-/**
- * 构建大纲 — 渲染完成后自动调用
- */
-function buildOutline(): void {
-  const contentEl = document.getElementById('markdown-content')!;
-  const treeEl = document.getElementById('outline-tree')!;
+function wantsOutline(): boolean {
+  return getString(StorageKeys.OUTLINE_VISIBLE, 'true') !== 'false';
+}
+
+function syncOutlineVisibility(): void {
   const panel = document.getElementById('outline');
+  const toggle = document.getElementById('outline-toggle') as HTMLButtonElement | null;
+  if (!panel || !toggle) return;
 
-  // 清理旧状态
+  const narrow = narrowLayout.matches;
+  const visible = hasOutline && (narrow ? mobileDrawerOpen : wantsOutline());
+  panel.classList.toggle('hidden', !visible);
+  panel.toggleAttribute('data-drawer', narrow);
+  if (narrow) {
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-label', '文档目录');
+  } else {
+    panel.removeAttribute('role');
+    panel.removeAttribute('aria-modal');
+  }
+  toggle.hidden = !hasOutline || !narrow;
+  toggle.setAttribute('aria-expanded', String(visible));
+}
+
+function closeOutlineAndRestoreFocus(): void {
+  toggleOutline(false);
+  if (narrowLayout.matches) document.getElementById('outline-toggle')?.focus();
+}
+
+export function initOutline(): void {
+  if (outlineInitialized) return;
+  outlineInitialized = true;
+
+  const content = document.getElementById('content');
+  const close = document.getElementById('outline-close');
+  const toggle = document.getElementById('outline-toggle');
+  const tree = document.getElementById('outline-tree');
+  close?.addEventListener('click', closeOutlineAndRestoreFocus);
+  toggle?.addEventListener('click', () => toggleOutline());
+  content?.addEventListener('scroll', () => {
+    if (progressRaf !== null) return;
+    progressRaf = requestAnimationFrame(() => {
+      progressRaf = null;
+      updateReadingProgress();
+    });
+  }, { passive: true });
+  tree?.addEventListener('keydown', (event) => {
+    const active = document.activeElement as HTMLButtonElement | null;
+    if (!active?.matches('.outline-item')) return;
+    const items = [...tree.querySelectorAll<HTMLButtonElement>('.outline-item')];
+    const index = items.indexOf(active);
+    if (index < 0) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      const next = event.key === 'ArrowDown' ? Math.min(items.length - 1, index + 1)
+        : event.key === 'ArrowUp' ? Math.max(0, index - 1)
+          : event.key === 'Home' ? 0 : items.length - 1;
+      items[next]?.focus();
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && narrowLayout.matches && mobileDrawerOpen) closeOutlineAndRestoreFocus();
+  });
+  narrowLayout.addEventListener('change', (event) => {
+    if (event.matches) mobileDrawerOpen = false;
+    syncOutlineVisibility();
+  });
+  onContentRendered(scheduleOutlineBuild);
+  syncOutlineVisibility();
+}
+
+function scheduleOutlineBuild(): void {
+  outlineBuildRequest += 1;
+  const requestId = outlineBuildRequest;
+  cancelScheduledBuild?.();
   clearOutline();
+  hasOutline = false;
+  syncOutlineVisibility();
 
-  // 如果内容区隐藏（空/错误态），隐藏大纲
-  if (contentEl.classList.contains('hidden')) {
-    if (panel) panel.classList.add('hidden');
+  const content = document.getElementById('markdown-content');
+  const tree = document.getElementById('outline-tree');
+  if (content?.dataset.largeDocument === 'true' && tree && wantsOutline()) tree.textContent = '正在延迟构建大文档目录…';
+  cancelScheduledBuild = scheduleIdle(() => {
+    cancelScheduledBuild = null;
+    if (requestId === outlineBuildRequest) buildOutline(requestId);
+  });
+}
+
+function buildOutline(requestId: number): void {
+  if (requestId !== outlineBuildRequest) return;
+  const content = document.getElementById('markdown-content');
+  const tree = document.getElementById('outline-tree');
+  if (!content || !tree) return;
+
+  addCopyButtons(content);
+  updateReadingProgress();
+  if (content.classList.contains('hidden')) {
+    hasOutline = false;
+    syncOutlineVisibility();
     return;
   }
 
-  // 提取标题
-  const headings = contentEl.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6');
-
-  // 短文档自动隐藏
+  const headings = content.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6');
   if (headings.length < 3) {
-    if (panel) panel.classList.add('hidden');
+    hasOutline = false;
+    syncOutlineVisibility();
     return;
   }
 
-  // 分配 ID 并计算最小层级
-  const minLevel = Math.min(...Array.from(headings).map(h => parseInt(h.tagName[1])));
+  const usedIds = new Map<string, number>();
+  const minLevel = Math.min(...Array.from(headings, (heading) => Number(heading.tagName[1])));
   const fragment = document.createDocumentFragment();
-
   headings.forEach((heading, index) => {
-    // 分配顺序化 ID
-    const id = `md-toc-${index}`;
+    const base = slugify(heading.textContent || `section-${index + 1}`);
+    const count = usedIds.get(base) ?? 0;
+    usedIds.set(base, count + 1);
+    const id = count === 0 ? base : `${base}-${count + 1}`;
     heading.id = id;
     heading.style.scrollMarginTop = '16px';
 
-    // 计算层级缩进
-    const level = parseInt(heading.tagName[1]);
-    const indent = (level - minLevel) * 14;
-
-    // 创建大纲项
-    const item = document.createElement('div');
+    const item = document.createElement('button');
+    item.type = 'button';
     item.className = 'outline-item';
-    item.style.paddingLeft = `${indent + 12}px`;
+    item.style.paddingLeft = `${Math.min((Number(heading.tagName[1]) - minLevel) * 14 + 12, 56)}px`;
     item.textContent = heading.textContent || `(标题 ${index + 1})`;
     item.title = heading.textContent || '';
-    item.setAttribute('data-target', id);
-
-    // 点击跳转
+    item.dataset.target = id;
     item.addEventListener('click', () => {
-      const target = document.getElementById(id);
-      if (target) {
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+      heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (narrowLayout.matches) toggleOutline(false);
     });
-
     fragment.appendChild(item);
   });
 
-  treeEl.innerHTML = '';
-  treeEl.appendChild(fragment);
-
-  // 显示大纲面板
-  if (panel) {
-    panel.classList.remove('hidden');
-  }
-
-  // 启动 scroll-spy
+  if (requestId !== outlineBuildRequest) return;
+  tree.replaceChildren(fragment);
+  hasOutline = true;
+  syncOutlineVisibility();
   setupScrollSpy(headings);
-
-  // 添加代码块复制按钮
-  addCopyButtons(contentEl);
 }
 
-/**
- * 设置滚动高亮 — IntersectionObserver
- */
+function slugify(value: string): string {
+  const normalized = value.trim().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  return normalized.replace(/[^\w\u4e00-\u9fff-]+/g, '-').replace(/^-+|-+$/g, '') || 'section';
+}
+
 function setupScrollSpy(headings: NodeListOf<HTMLElement>): void {
   const content = document.getElementById('content');
   if (!content) return;
-
-  scrollSpy = new IntersectionObserver(
-    (entries) => {
-      // 收集当前可见的标题
-      const visibleIds = new Set<string>();
-      for (const entry of entries) {
-        if (entry.isIntersecting) {
-          visibleIds.add(entry.target.id);
-        }
-      }
-
-      if (visibleIds.size === 0) return;
-
-      // 取文档顺序最靠前的可见标题
-      let firstVisible: string | null = null;
-      for (const heading of headings) {
-        if (visibleIds.has(heading.id)) {
-          firstVisible = heading.id;
-          break;
-        }
-      }
-
-      if (firstVisible) {
-        // 更新高亮
-        document.querySelectorAll('.outline-item.active').forEach(el => {
-          el.classList.remove('active');
-        });
-        const activeItem = document.querySelector(`.outline-item[data-target="${firstVisible}"]`);
-        if (activeItem) {
-          activeItem.classList.add('active');
-          // 滚动大纲到可见区域
-          const treeEl = document.getElementById('outline-tree');
-          if (treeEl) {
-            const itemTop = (activeItem as HTMLElement).offsetTop;
-            const treeHeight = treeEl.clientHeight;
-            treeEl.scrollTop = itemTop - treeHeight / 2;
-          }
-        }
-      }
-    },
-    {
-      root: content,
-      rootMargin: '0px 0px -75% 0px',
-      threshold: 0,
-    }
-  );
-
-  // 观察所有标题
-  headings.forEach(heading => scrollSpy!.observe(heading));
+  scrollSpy = new IntersectionObserver((entries) => {
+    const visible = new Set(entries.filter((entry) => entry.isIntersecting).map((entry) => entry.target.id));
+    const current = Array.from(headings).find((heading) => visible.has(heading.id));
+    if (!current) return;
+    document.querySelectorAll('.outline-item.active').forEach((item) => item.classList.remove('active'));
+    const item = document.querySelector<HTMLButtonElement>(`.outline-item[data-target="${CSS.escape(current.id)}"]`);
+    if (!item) return;
+    item.classList.add('active');
+    const tree = document.getElementById('outline-tree');
+    if (tree) tree.scrollTop = item.offsetTop - tree.clientHeight / 2;
+  }, { root: content, rootMargin: '0px 0px -75% 0px', threshold: 0 });
+  headings.forEach((heading) => scrollSpy?.observe(heading));
 }
 
-/**
- * 清理大纲状态
- */
 function clearOutline(): void {
-  if (scrollSpy) {
-    scrollSpy.disconnect();
-    scrollSpy = null;
-  }
-  const treeEl = document.getElementById('outline-tree');
-  if (treeEl) {
-    treeEl.innerHTML = '';
-  }
+  scrollSpy?.disconnect();
+  scrollSpy = null;
+  document.getElementById('outline-tree')?.replaceChildren();
 }
 
-/**
- * 切换大纲显示/隐藏
- */
 export function toggleOutline(force?: boolean): void {
-  const panel = document.getElementById('outline');
-  if (!panel) return;
-
-  const shouldShow = force !== undefined ? force : panel.classList.contains('hidden');
-
-  if (shouldShow) {
-    panel.classList.remove('hidden');
+  if (narrowLayout.matches) {
+    mobileDrawerOpen = force ?? !mobileDrawerOpen;
   } else {
-    panel.classList.add('hidden');
+    const show = force ?? !wantsOutline();
+    setString(StorageKeys.OUTLINE_VISIBLE, String(show));
   }
-
-  setString(StorageKeys.OUTLINE_VISIBLE, String(shouldShow));
+  syncOutlineVisibility();
 }
 
-/**
- * 给代码块添加复制按钮
- */
-function addCopyButtons(contentEl: HTMLElement): void {
-  const preElements = contentEl.querySelectorAll('pre');
-  preElements.forEach(pre => {
-    // 跳过已有复制按钮的
+function addCopyButtons(content: HTMLElement): void {
+  content.querySelectorAll<HTMLElement>('pre').forEach((pre) => {
     if (pre.querySelector('.copy-btn')) return;
-
-    // 确保 pre 是 relative 定位
-    (pre as HTMLElement).style.position = 'relative';
-
-    const btn = document.createElement('button');
-    btn.className = 'copy-btn';
-    btn.textContent = '复制';
-    btn.title = '复制代码';
-
-    btn.addEventListener('click', async () => {
-      const code = pre.querySelector('code');
-      const text = code ? code.textContent : pre.textContent;
-      if (text) {
-        try {
-          await navigator.clipboard.writeText(text);
-          btn.textContent = '已复制';
-          setTimeout(() => {
-            btn.textContent = '复制';
-          }, 2000);
-        } catch {
-          btn.textContent = '失败';
-          setTimeout(() => {
-            btn.textContent = '复制';
-          }, 2000);
-        }
+    pre.style.position = 'relative';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'copy-btn';
+    button.textContent = '复制';
+    button.title = '复制代码';
+    button.setAttribute('aria-label', '复制代码块');
+    button.addEventListener('click', async () => {
+      const text = pre.querySelector('code')?.textContent ?? pre.textContent;
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = '已复制';
+      } catch {
+        button.textContent = '失败';
       }
+      window.setTimeout(() => { button.textContent = '复制'; }, 1600);
     });
-
-    pre.appendChild(btn);
+    pre.appendChild(button);
   });
 }
 
-/**
- * 更新阅读进度条
- */
 function updateReadingProgress(): void {
   const content = document.getElementById('content');
   const progress = document.getElementById('reading-progress');
   if (!content || !progress) return;
-
-  const max = content.scrollHeight - content.clientHeight;
-  if (max <= 0) {
-    progress.style.width = '0%';
-    return;
-  }
-
-  const percent = (content.scrollTop / max) * 100;
-  progress.style.width = `${percent}%`;
+  const maximum = content.scrollHeight - content.clientHeight;
+  progress.style.width = maximum > 0 ? `${(content.scrollTop / maximum) * 100}%` : '0%';
 }

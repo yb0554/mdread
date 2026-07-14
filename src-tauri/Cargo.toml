@@ -1,6 +1,6 @@
 [package]
 name = "mdread"
-version = "1.1.0"
+version = "1.2.2"
 description = "轻量级 Markdown 阅读器"
 authors = ["mdread"]
 edition = "2021"
@@ -19,6 +19,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 encoding_rs = "0.8"
 notify = "6"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-wdio = { version = "1.2.0", optional = true }
+tauri-plugin-wdio-webdriver = { version = "1.2.0", optional = true }
 
 [profile.release]
 opt-level = "z"
@@ -26,3 +30,7 @@ lto = true
 codegen-units = 1
 strip = true
 panic = "abort"
+
+[features]
+# Test-only desktop automation. This is never enabled by the release build.
+e2e = ["dep:tauri-plugin-wdio", "dep:tauri-plugin-wdio-webdriver"]

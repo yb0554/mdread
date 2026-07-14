@@ -1,8 +1,4 @@
-/**
- * mdread 最近文件
- * - 默认只显示最近 1 个, 其余折叠
- * - 支持清空全部 + 单项移除
- */
+/** Recent documents with fully keyboard-accessible controls. */
 
 import { StorageKeys, getJSON, setJSON, remove } from './storage';
 
@@ -11,14 +7,23 @@ const MAX_RECENT = 10;
 let onOpenCallback: ((path: string) => void) | null = null;
 let expanded = false;
 
+function createButton(text: string, className: string, label: string): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.textContent = text;
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  return button;
+}
+
 export function initRecent(onOpen: (path: string) => void): void {
   onOpenCallback = onOpen;
   renderRecent();
 }
 
 export function addRecent(path: string): void {
-  let recent = getRecent();
-  recent = recent.filter(f => f !== path);
+  let recent = getRecent().filter((item) => item !== path);
   recent.unshift(path);
   recent = recent.slice(0, MAX_RECENT);
   setJSON(StorageKeys.RECENT_FILES, recent);
@@ -27,8 +32,7 @@ export function addRecent(path: string): void {
 }
 
 export function removeRecent(path: string): void {
-  let recent = getRecent().filter(f => f !== path);
-  setJSON(StorageKeys.RECENT_FILES, recent);
+  setJSON(StorageKeys.RECENT_FILES, getRecent().filter((item) => item !== path));
   renderRecent();
 }
 
@@ -47,76 +51,45 @@ function renderRecent(): void {
   if (!container) return;
 
   const recent = getRecent();
-  if (recent.length === 0) {
-    container.innerHTML = '';
-    container.style.display = 'none';
-    return;
-  }
+  container.replaceChildren();
+  container.style.display = recent.length > 0 ? 'block' : 'none';
+  if (recent.length === 0) return;
 
-  container.style.display = 'block';
-  container.innerHTML = '';
-
-  // 头部: 标题 + 清空按钮
   const header = document.createElement('div');
   header.className = 'recent-header';
-
   const title = document.createElement('span');
   title.textContent = '最近打开';
-  header.appendChild(title);
-
-  const clearBtn = document.createElement('span');
-  clearBtn.className = 'recent-clear-btn';
-  clearBtn.textContent = '清空';
-  clearBtn.title = '清空最近文件';
-  clearBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    clearRecent();
-  });
-  header.appendChild(clearBtn);
+  const clearButton = createButton('清空', 'recent-clear-btn', '清空最近文件');
+  clearButton.addEventListener('click', clearRecent);
+  header.append(title, clearButton);
   container.appendChild(header);
 
-  // 决定显示数量: 折叠时只显示 1 个, 展开时全部
-  const showCount = expanded ? recent.length : 1;
-
-  for (let i = 0; i < showCount && i < recent.length; i++) {
-    const path = recent[i];
+  const visibleItems = recent.slice(0, expanded ? recent.length : 1);
+  for (const path of visibleItems) {
     const item = document.createElement('div');
     item.className = 'recent-item';
 
+    const openButton = createButton('', 'recent-open-btn', `打开最近文件：${path}`);
     const icon = document.createElement('span');
     icon.className = 'recent-icon';
     icon.textContent = '📄';
-
+    icon.setAttribute('aria-hidden', 'true');
     const label = document.createElement('span');
     label.className = 'recent-label';
-    label.textContent = path.split(/[\\/]/).pop() || path;
+    label.textContent = path.split(/[\/]/).pop() || path;
     label.title = path;
+    openButton.append(icon, label);
+    openButton.addEventListener('click', () => onOpenCallback?.(path));
 
-    const removeBtn = document.createElement('span');
-    removeBtn.className = 'recent-remove-btn';
-    removeBtn.textContent = '×';
-    removeBtn.title = '移除';
-    removeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      removeRecent(path);
-    });
-
-    item.appendChild(icon);
-    item.appendChild(label);
-    item.appendChild(removeBtn);
-
-    item.addEventListener('click', () => {
-      if (onOpenCallback) onOpenCallback(path);
-    });
-
+    const removeButton = createButton('×', 'recent-remove-btn', `从最近文件中移除：${path}`);
+    removeButton.addEventListener('click', () => removeRecent(path));
+    item.append(openButton, removeButton);
     container.appendChild(item);
   }
 
-  // 如果有更多项, 显示展开/收起按钮
   if (recent.length > 1) {
-    const toggle = document.createElement('div');
-    toggle.className = 'recent-toggle';
-    toggle.textContent = expanded ? '收起 ▲' : `还有 ${recent.length - 1} 个 ▼`;
+    const toggle = createButton(expanded ? '收起 ▲' : `还有 ${recent.length - 1} 个 ▼`, 'recent-toggle', expanded ? '收起最近文件列表' : '展开最近文件列表');
+    toggle.setAttribute('aria-expanded', String(expanded));
     toggle.addEventListener('click', () => {
       expanded = !expanded;
       renderRecent();
