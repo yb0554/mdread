@@ -1,0 +1,96 @@
+/* ============================================================
+ * mdread 打印样式 — 仅保留 Markdown 正文，隐藏所有 UI chrome
+ * ============================================================ */
+
+@media print {
+  /* === 隐藏所有非内容 UI 元素 === */
+  #sidebar,
+  #sidebar-resizer,
+  #reading-progress,
+  #outline,
+  #empty-state {
+    display: none !important;
+  }
+
+  /* === 重置布局容器 === */
+  #app {
+    display: block !important;
+  }
+
+  #content {
+    overflow: visible !important;
+    height: auto !important;
+    width: 100% !important;
+    background-color: #ffffff !important;
+  }
+
+  /* === 强制浅色输出（覆盖深色主题） === */
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* === Markdown 内容容器调整为打印友好 === */
+  #markdown-content {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 20px 40px !important;
+    color: #000000 !important;
+    background: #ffffff !important;
+  }
+
+  /* === 强制打印背景色（代码块、引用块等需保留配色） === */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* === 代码块：避免跨页截断 + 自动换行 === */
+  #markdown-content pre {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    page-break-inside: avoid;
+  }
+
+  /* === 标题不与后续内容分离 === */
+  #markdown-content h1,
+  #markdown-content h2,
+  #markdown-content h3 {
+    page-break-after: avoid;
+  }
+
+  /* === 图片避免跨页截断 === */
+  #markdown-content img {
+    page-break-inside: avoid;
+  }
+
+  /* === 表格避免跨页截断 === */
+  #markdown-content table {
+    page-break-inside: avoid;
+    display: table !important;
+  }
+
+  /* === 隐藏代码块复制按钮（如存在） === */
+  .copy-btn {
+    display: none !important;
+  }
+}
+
+/* Exporting should present only document content. */
+@media print {
+  #document-meta { display: none !important; }
+
+  @page { margin: 14mm; }
+
+  #markdown-content img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  #markdown-content a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    color: #444 !important;
+    font-size: 9pt;
+    overflow-wrap: anywhere;
+  }
+}

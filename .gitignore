@@ -25,3 +25,13 @@ release-assets/
 *.njsproj
 *.sln
 *.sw?
+
+coverage/
+
+# Temporary WDIO capability created only while building E2E binary
+src-tauri/capabilities/wdio-e2e.json
+# Local packaging output and audit reports
+release/
+npm-audit.json
+
+src-tauri/tauri.e2e.generated.conf.json

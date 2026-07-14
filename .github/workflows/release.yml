@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -27,9 +30,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -40,10 +46,28 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb
 
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Quality gate
+        run: |
+          npm run check
+          npm run test:coverage
+          npm audit --omit=dev --audit-level=high
+          cargo fmt --manifest-path src-tauri/Cargo.toml --check
+          cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+          cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Desktop smoke E2E (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: npm run test:e2e
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: RustSec audit
+        run: cargo audit --file src-tauri/Cargo.lock
 
       - name: Build and release Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -52,7 +76,72 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'mdread ${{ github.ref_name }}'
-          releaseBody: 'See the assets below to download and install.'
+          releaseBody: |
+            ## mdread ${{ github.ref_name }}
+
+            - Stability fixes for document authorization, rapid document switching, cancellable search, file-tree truncation, and responsive outline navigation.
+            - Supported local Markdown extensions: `.md` and `.markdown`.
+            - This Windows release is unsigned because no code-signing certificate is configured. Verify downloads with the attached `SHA256SUMS.txt`.
+
+            Source-level details: `CHANGELOG.md`.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Archive build bundles for provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.platform }}
+          path: src-tauri/target/release/bundle
+          if-no-files-found: error
+
+  provenance:
+    name: Generate SBOM and checksums
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Download release bundles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bundle-*
+          path: release-assets/bundles
+          merge-multiple: true
+      - name: Generate SBOM and SHA-256 manifest
+        run: |
+          npm run generate:sbom
+          npm run generate:checksums
+      - name: Attach provenance files to draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          files: |
+            release-assets/*.cdx.json
+            release-assets/SHA256SUMS.txt
+      - name: Archive provenance files
+        uses: actions/upload-artifact@v4
+        with:
+          name: provenance-${{ github.ref_name }}
+          path: |
+            release-assets/*.cdx.json
+            release-assets/SHA256SUMS.txt
+
+  publish:
+    name: Publish verified release
+    needs: provenance
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Publish the verified draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false

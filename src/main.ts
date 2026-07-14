@@ -1,140 +1,281 @@
-/**
- * mdread 主入口
- * 统一菜单 + 模块装配
- */
+/** Application composition and user-facing reading workflow. */
 
-import { initTheme, setTheme, getCurrentTheme, getThemeOptions, setFont, getCurrentFont, getFontOptions } from './theme';
-import { pickFolder, renderFileTree, appendFolder, onFileSelect, getFolders } from './filetree';
-import { loadFile } from './renderer';
-import { initOutline, toggleOutline } from './outline';
-import { initShortcuts } from './shortcuts';
-import { initSearch } from './search';
-import { initRecent, addRecent, clearRecent } from './recent';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+
+import {
+  appendFolder,
+  findWorkspaceDocument,
+  initializeFileTree,
+  onFileSelect,
+  pickFolder,
+  syncSelectedPath,
+} from './filetree';
+import { exportToPdf } from './export-service';
+import { formatDisplayPath } from './path-display';
 import { initDragDrop } from './dragdrop';
 import { initHistory, pushHistory } from './history';
+import { initOutline, toggleOutline } from './outline';
+import { addRecent, clearRecent, initRecent } from './recent';
+import {
+  areRemoteImagesAllowed,
+  loadDocument,
+  loadFile,
+  onDocumentLoaded,
+  revealCurrentDocument,
+  setRemoteImagesAllowed,
+} from './renderer';
+import { initSearch } from './search';
+import { initShortcuts } from './shortcuts';
+import { selectMarkdownPath, type OpenDocumentsPayload } from './system-open';
+import { getAppState, updateAppState } from './storage';
+import {
+  getCurrentFont,
+  getCurrentThemePreference,
+  getFontOptions,
+  getThemeOptions,
+  initTheme,
+  setFont,
+  setTheme,
+} from './theme';
+import type { DocumentPayload, FileSelection } from './types';
+
+let activePath: string | null = null;
+
+// The WDIO bridge is only bundled into the dedicated E2E build.
+if (import.meta.env.VITE_E2E === 'true') {
+  void import('@wdio/tauri-plugin');
+}
 
 window.addEventListener('DOMContentLoaded', async () => {
   initTheme();
   initMenu();
   initSearch();
+  initOutline();
+  setupSidebarResizer();
 
-  const fileTree = document.getElementById('file-tree')!;
+  const fileTree = document.getElementById('file-tree');
+  if (!fileTree) return;
+  await initializeFileTree(fileTree);
 
-  onFileSelect((path) => {
-    loadFile(path);
-    addRecent(path);
-    pushHistory(path);
+  onFileSelect((selection) => {
+    void openSelection(selection, { recordRecent: true, pushNavigation: true });
   });
 
-  // 恢复已保存的文件夹列表
-  if (getFolders().length > 0) {
-    await renderFileTree(fileTree);
-  }
+  initShortcuts({ addWorkspace });
+  initHistory((path) => { void openPath(path); });
+  initRecent((path) => { void openPath(path, { recordRecent: false, pushNavigation: true }); });
+  void initDragDrop((path) => { void openPath(path, { recordRecent: true, pushNavigation: true }); });
+  renderFavorites();
 
-  setupSidebarResizer();
-  initOutline();
-  initShortcuts();
-  initHistory((p) => loadFile(p));
-  initRecent((p) => { loadFile(p); pushHistory(p); });
-  initDragDrop((p) => { loadFile(p); pushHistory(p); });
+  onDocumentLoaded((payload) => updateDocumentMetadata(payload));
+
+  const openedBySystem = await initSystemOpenIntegration();
+  const lastDocument = getAppState().lastDocument;
+  if (!openedBySystem && lastDocument) {
+    // Await session restoration so it cannot race a user's first file-tree
+    // selection and repaint a stale document after the new request begins.
+    await openPath(lastDocument, { recordRecent: false, pushNavigation: false });
+  }
+  if (import.meta.env.VITE_E2E === 'true') {
+    document.documentElement.dataset.e2eReady = 'true';
+  }
 });
 
-// === 统一菜单 ===
+interface OpenOptions {
+  recordRecent?: boolean;
+  pushNavigation?: boolean;
+}
 
-function initMenu(): void {
-  const menuBtn = document.getElementById('menu-btn')!;
-  const popup = document.getElementById('menu-popup')!;
+async function openSelection(selection: FileSelection, options: OpenOptions = {}): Promise<boolean> {
+  const payload = await loadDocument(selection.documentRef);
+  if (!payload) return false;
+  activePath = selection.absolutePath;
+  await syncSelectedPath(selection.absolutePath);
+  finishOpen(selection.absolutePath, payload, options);
+  return true;
+}
 
-  buildMenuContent(popup);
+async function openPath(path: string, options: OpenOptions = {}): Promise<boolean> {
+  const selection = findWorkspaceDocument(path);
+  if (selection) {
+    return openSelection(selection, options);
+  }
 
-  menuBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    popup.classList.toggle('hidden');
+  const payload = await loadFile(path);
+  if (!payload) return false;
+  activePath = path;
+  await syncSelectedPath(path);
+  finishOpen(path, payload, options);
+  return true;
+}
+
+async function initSystemOpenIntegration(): Promise<boolean> {
+  await listen<OpenDocumentsPayload>('open-documents', (event) => {
+    void openSystemDocument(event.payload.paths);
   });
 
-  document.addEventListener('click', () => {
-    popup.classList.add('hidden');
+  try {
+    const paths = await invoke<string[]>('take_initial_launch_paths');
+    return openSystemDocument(paths);
+  } catch (error) {
+    console.warn('无法读取系统启动文件:', error);
+    return false;
+  }
+}
+
+async function openSystemDocument(paths: readonly string[] | undefined): Promise<boolean> {
+  const path = selectMarkdownPath(paths);
+  if (!path) return false;
+  return openPath(path, { recordRecent: true, pushNavigation: true });
+}
+
+function finishOpen(path: string, payload: DocumentPayload, options: OpenOptions): void {
+  updateAppState({ lastDocument: path });
+  if (options.recordRecent !== false) addRecent(path);
+  if (options.pushNavigation !== false) pushHistory(path);
+  updateDocumentMetadata(payload);
+  renderFavorites();
+}
+
+async function addWorkspace(): Promise<void> {
+  const workspace = await pickFolder();
+  if (workspace) appendFolder(workspace);
+}
+
+function updateDocumentMetadata(payload: DocumentPayload): void {
+  const meta = document.getElementById('document-meta');
+  if (!meta) return;
+  const size = formatBytes(payload.byteSize);
+  const minutes = Math.max(1, Math.ceil(payload.content.trim().split(/\s+/).filter(Boolean).length / 220));
+  const path = formatDisplayPath(activePath ?? payload.name);
+  meta.textContent = `${path} · ${size} · 预计阅读 ${minutes} 分钟${payload.warnings.length ? ` · ${payload.warnings.join('；')}` : ''}`;
+  meta.title = path;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function renderFavorites(): void {
+  const container = document.getElementById('favorite-files');
+  if (!container) return;
+  const favorites = getAppState().favorites;
+  container.replaceChildren();
+  container.hidden = favorites.length === 0;
+  if (favorites.length === 0) return;
+
+  const heading = document.createElement('div');
+  heading.className = 'recent-header';
+  heading.textContent = '收藏';
+  container.appendChild(heading);
+
+  for (const path of favorites.slice(0, 10)) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'recent-item';
+    item.title = path;
+    const icon = document.createElement('span');
+    icon.className = 'recent-icon';
+    icon.textContent = '★';
+    icon.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('span');
+    label.className = 'recent-label';
+    label.textContent = path.split(/[\\/]/).pop() || path;
+    item.append(icon, label);
+    item.addEventListener('click', () => { void openPath(path, { recordRecent: true, pushNavigation: true }); });
+    container.appendChild(item);
+  }
+}
+
+function toggleFavorite(): void {
+  if (!activePath) return;
+  const state = getAppState();
+  const exists = state.favorites.includes(activePath);
+  updateAppState({
+    favorites: exists ? state.favorites.filter((path) => path !== activePath) : [activePath, ...state.favorites].slice(0, 100),
+  });
+  renderFavorites();
+  const popup = document.getElementById('menu-popup');
+  if (popup) buildMenuContent(popup);
+}
+
+function initMenu(): void {
+  const menuBtn = document.getElementById('menu-btn');
+  const popup = document.getElementById('menu-popup');
+  if (!menuBtn || !popup) return;
+  menuBtn.setAttribute('aria-expanded', 'false');
+  menuBtn.setAttribute('aria-controls', 'menu-popup');
+  buildMenuContent(popup);
+
+  menuBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const open = popup.classList.toggle('hidden') === false;
+    menuBtn.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', () => hidePopup());
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') hidePopup();
   });
 }
 
 function buildMenuContent(popup: HTMLElement): void {
-  popup.innerHTML = '';
+  popup.replaceChildren();
+  popup.setAttribute('role', 'menu');
+  popup.appendChild(createMenuItem('📁 添加文件夹', () => { void addWorkspace(); }));
+  popup.appendChild(createMenuItem('★ 收藏/取消收藏当前文档', toggleFavorite, !activePath));
+  popup.appendChild(createMenuItem('📂 在文件管理器中显示当前文档', () => { void revealCurrentDocument(); }, !activePath));
+  popup.appendChild(createMenuItem('☰ 显示/隐藏目录', () => toggleOutline()));
+  popup.appendChild(createMenuItem('🖨 打印 / 导出 PDF', exportToPdf));
+  popup.appendChild(createMenuItem(
+    areRemoteImagesAllowed() ? '🖼 禁止远程图片' : '🖼 允许远程图片',
+    () => { void setRemoteImagesAllowed(!areRemoteImagesAllowed()).then(() => buildMenuContent(popup)); },
+  ));
 
-  // 添加文件夹
-  popup.appendChild(createMenuItem('📁 添加文件夹', async () => {
-    const folderPath = await pickFolder();
-    if (folderPath) {
-      await appendFolder(document.getElementById('file-tree')!, folderPath);
-    }
-  }));
-
-  // 显示/隐藏目录
-  popup.appendChild(createMenuItem('☰ 显示/隐藏目录', () => {
-    toggleOutline();
-  }));
-
-  // 分隔线
   popup.appendChild(createMenuSeparator());
-
-  // 主题选项
-  const themeLabel = createMenuLabel('主题');
-  popup.appendChild(themeLabel);
-  for (const opt of getThemeOptions()) {
-    const item = createMenuOption(opt.label, opt.value === getCurrentTheme(), () => {
-      setTheme(opt.value);
-      rebuildMenu(popup);
-    });
-    popup.appendChild(item);
+  popup.appendChild(createMenuLabel('主题'));
+  for (const option of getThemeOptions()) {
+    popup.appendChild(createMenuOption(option.label, option.value === getCurrentThemePreference(), () => {
+      setTheme(option.value);
+      buildMenuContent(popup);
+    }));
   }
 
-  // 分隔线
   popup.appendChild(createMenuSeparator());
-
-  // 字体选项
   popup.appendChild(createMenuLabel('字体'));
-  for (const opt of getFontOptions()) {
-    const item = createMenuOption(opt.label, opt.value === getCurrentFont(), () => {
-      setFont(opt.value);
-    });
-    popup.appendChild(item);
+  for (const option of getFontOptions()) {
+    popup.appendChild(createMenuOption(option.label, option.value === getCurrentFont(), () => {
+      setFont(option.value);
+      buildMenuContent(popup);
+    }));
   }
 
-  // 分隔线
   popup.appendChild(createMenuSeparator());
-
-  // 清空最近文件
-  popup.appendChild(createMenuItem('🗑 清空最近文件', () => {
-    clearRecent();
-  }));
+  popup.appendChild(createMenuItem('🗑 清空最近文件', clearRecent));
 }
 
-function rebuildMenu(popup: HTMLElement): void {
-  buildMenuContent(popup);
-}
-
-function createMenuItem(text: string, onClick: () => void): HTMLElement {
-  const item = document.createElement('div');
+function createMenuItem(text: string, onClick: () => void, disabled = false): HTMLButtonElement {
+  const item = document.createElement('button');
+  item.type = 'button';
   item.className = 'menu-item';
   item.textContent = text;
-  item.addEventListener('click', (e) => {
-    e.stopPropagation();
+  item.disabled = disabled;
+  item.setAttribute('role', 'menuitem');
+  item.addEventListener('click', (event) => {
+    event.stopPropagation();
     onClick();
     hidePopup();
   });
   return item;
 }
 
-function createMenuOption(text: string, active: boolean, onClick: () => void): HTMLElement {
-  const item = document.createElement('div');
-  item.className = 'menu-option' + (active ? ' active' : '');
-  item.textContent = text;
-  item.addEventListener('click', (e) => {
-    e.stopPropagation();
-    onClick();
-    const popup = document.getElementById('menu-popup')!;
-    rebuildMenu(popup);
-    hidePopup();
-  });
+function createMenuOption(text: string, active: boolean, onClick: () => void): HTMLButtonElement {
+  const item = createMenuItem(`${active ? '✓ ' : ''}${text}`, onClick);
+  item.classList.add('menu-option');
+  item.setAttribute('role', 'menuitemradio');
+  item.setAttribute('aria-checked', String(active));
   return item;
 }
 
@@ -146,40 +287,44 @@ function createMenuLabel(text: string): HTMLElement {
 }
 
 function createMenuSeparator(): HTMLElement {
-  const sep = document.createElement('div');
-  sep.className = 'menu-separator';
-  return sep;
+  const separator = document.createElement('div');
+  separator.className = 'menu-separator';
+  separator.setAttribute('role', 'separator');
+  return separator;
 }
 
 function hidePopup(): void {
-  document.getElementById('menu-popup')?.classList.add('hidden');
+  const popup = document.getElementById('menu-popup');
+  const button = document.getElementById('menu-btn');
+  popup?.classList.add('hidden');
+  button?.setAttribute('aria-expanded', 'false');
 }
 
-// === 侧边栏拖拽 ===
-
 function setupSidebarResizer(): void {
-  const resizer = document.getElementById('sidebar-resizer')!;
-  const sidebar = document.getElementById('sidebar')!;
-  let isResizing = false;
+  const resizer = document.getElementById('sidebar-resizer');
+  const sidebar = document.getElementById('sidebar');
+  if (!resizer || !sidebar) return;
 
-  resizer.addEventListener('mousedown', (e) => {
-    isResizing = true;
+  const savedWidth = getAppState().sidebarWidth;
+  if (savedWidth && savedWidth >= 200 && savedWidth <= 500) sidebar.style.width = `${savedWidth}px`;
+
+  let resizing = false;
+  resizer.addEventListener('mousedown', (event) => {
+    resizing = true;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
-    e.preventDefault();
+    event.preventDefault();
   });
-
-  document.addEventListener('mousemove', (e) => {
-    if (!isResizing) return;
-    const newWidth = Math.max(200, Math.min(500, e.clientX));
-    sidebar.style.width = `${newWidth}px`;
+  document.addEventListener('mousemove', (event) => {
+    if (!resizing) return;
+    const width = Math.max(200, Math.min(500, event.clientX));
+    sidebar.style.width = `${width}px`;
   });
-
   document.addEventListener('mouseup', () => {
-    if (isResizing) {
-      isResizing = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
+    if (!resizing) return;
+    resizing = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    updateAppState({ sidebarWidth: sidebar.getBoundingClientRect().width });
   });
 }

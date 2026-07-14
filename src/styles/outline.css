@@ -5,8 +5,11 @@
 
 /* === 大纲面板 === */
 #outline {
-  width: 240px;
-  flex-shrink: 0;
+  flex: 0 0 260px;
+  width: 260px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
   background-color: var(--bg-sidebar);
   border-left: 1px solid var(--border-color);
   display: flex;
@@ -24,6 +27,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-width: 0;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-secondary);
@@ -31,12 +35,17 @@
 }
 
 .outline-title {
+  min-width: 0;
+  overflow: hidden;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #outline-close {
+  flex: 0 0 auto;
   width: 20px;
   height: 20px;
   line-height: 18px;
@@ -57,23 +66,38 @@
 
 /* === 大纲列表 === */
 #outline-tree {
-  flex: 1;
-  overflow-y: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
   padding: 6px 0;
   user-select: none;
 }
 
 .outline-item {
-  padding: 4px 12px;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-secondary);
-  white-space: nowrap;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 5px 12px;
   overflow: hidden;
-  text-overflow: ellipsis;
+  border: 0;
   border-left: 2px solid transparent;
-  transition: background-color 0.1s ease, color 0.1s ease;
+  border-radius: 0;
+  appearance: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
   line-height: 1.4;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.1s ease, color 0.1s ease;
 }
 
 .outline-item:hover {
@@ -148,4 +172,48 @@
 .copy-btn:hover {
   background-color: var(--bg-hover);
   color: var(--text-primary);
+}
+
+
+.outline-mobile-toggle {
+  display: none;
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 101;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  box-shadow: 0 5px 18px var(--shadow);
+  cursor: pointer;
+}
+
+.outline-mobile-toggle:hover {
+  border-color: var(--accent-color);
+  background: var(--bg-hover);
+}
+
+@media (max-width: 960px) {
+  #outline[data-drawer] {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 110;
+    width: min(86vw, 360px);
+    height: 100dvh;
+    max-width: 360px;
+    box-shadow: -10px 0 28px var(--shadow);
+  }
+
+  .outline-mobile-toggle:not([hidden]) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
 }
