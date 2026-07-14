@@ -6,17 +6,17 @@
 
 /* === 浅色 (默认) === */
 :root, [data-theme="light"] {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f6f8fa;
-  --bg-sidebar: #f6f8fa;
-  --bg-hover: #eaeef2;
-  --bg-active: #ddf4ff;
-  --text-primary: #1f2328;
-  --text-secondary: #656d76;
-  --text-tertiary: #8b949e;
-  --border-color: #d1d9e0;
-  --accent-color: #0969da;
-  --accent-hover: #0550ae;
+  --bg-primary: #fbfcfe;
+  --bg-secondary: #ffffff;
+  --bg-sidebar: #f5f7fb;
+  --bg-hover: #edf1f7;
+  --bg-active: #e7e9ff;
+  --text-primary: #1d2433;
+  --text-secondary: #5f6b7d;
+  --text-tertiary: #8994a6;
+  --border-color: #dfe5ee;
+  --accent-color: #5b5ce2;
+  --accent-hover: #4c4dcc;
   --code-bg: #f6f8fa;
   --code-border: #e1e4e8;
   --shadow: rgba(0, 0, 0, 0.08);
@@ -28,17 +28,17 @@
 
 /* === 深色 === */
 [data-theme="dark"] {
-  --bg-primary: #0d1117;
-  --bg-secondary: #161b22;
-  --bg-sidebar: #161b22;
-  --bg-hover: #1c2128;
-  --bg-active: #1a3045;
-  --text-primary: #e6edf3;
-  --text-secondary: #7d8590;
-  --text-tertiary: #6e7681;
-  --border-color: #30363d;
-  --accent-color: #2f81f7;
-  --accent-hover: #4493f8;
+  --bg-primary: #11141c;
+  --bg-secondary: #181c27;
+  --bg-sidebar: #151925;
+  --bg-hover: #242a39;
+  --bg-active: #292a52;
+  --text-primary: #edf1fa;
+  --text-secondary: #a7b0c2;
+  --text-tertiary: #748096;
+  --border-color: #2d3444;
+  --accent-color: #9295ff;
+  --accent-hover: #afb0ff;
   --code-bg: #161b22;
   --code-border: #30363d;
   --shadow: rgba(0, 0, 0, 0.3);

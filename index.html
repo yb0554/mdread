@@ -17,9 +17,20 @@
     <div id="app">
       <aside id="sidebar">
         <div id="sidebar-header">
-          <button id="menu-btn" type="button" title="菜单" aria-label="打开应用菜单">
-            <span class="btn-icon">≡</span>
-          </button>
+          <div class="sidebar-toolbar" role="toolbar" aria-label="工作区工具">
+            <button id="add-workspace-btn" class="toolbar-btn toolbar-btn-primary" type="button" title="添加文件夹" aria-label="添加文件夹">
+              <span class="toolbar-icon" aria-hidden="true">＋</span>
+              <span class="toolbar-label">添加</span>
+            </button>
+            <button id="favorite-toggle-btn" class="toolbar-btn" type="button" title="收藏当前文档" aria-label="收藏当前文档" aria-pressed="false" disabled>
+              <span class="toolbar-icon" aria-hidden="true">☆</span>
+              <span class="toolbar-label">收藏</span>
+            </button>
+            <span class="toolbar-divider" aria-hidden="true"></span>
+            <button id="menu-btn" class="toolbar-btn toolbar-menu-btn" type="button" title="更多选项" aria-label="打开更多选项" aria-haspopup="dialog">
+              <span class="toolbar-icon" aria-hidden="true">•••</span>
+            </button>
+          </div>
           <div id="menu-popup" class="hidden"></div>
           <input id="file-search" type="search" placeholder="搜索文件（content: 正文）..." aria-label="搜索当前工作区中的 Markdown 文件" />
         </div>
@@ -32,7 +43,7 @@
         <div id="empty-state">
           <div class="empty-icon">📄</div>
           <p class="empty-title">请选择一个 Markdown 文件</p>
-          <p class="empty-hint">点击左上角 ≡ 菜单 → 添加文件夹</p>
+          <p class="empty-hint">点击左上角“添加”按钮，选择一个文件夹开始阅读</p>
         </div>
         <div id="document-meta" class="document-meta" aria-live="polite"></div>
         <article id="markdown-content" class="hidden" tabindex="-1"></article>

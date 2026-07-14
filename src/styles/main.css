@@ -41,11 +41,11 @@ body {
 
 #sidebar-header {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
+  flex-direction: column;
+  gap: 7px;
+  padding: 8px;
   border-bottom: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 94%, var(--bg-sidebar));
   flex-shrink: 0;
   position: relative;
 }

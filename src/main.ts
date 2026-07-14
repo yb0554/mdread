@@ -12,7 +12,7 @@ import {
   syncSelectedPath,
 } from './filetree';
 import { exportToPdf } from './export-service';
-import { formatDisplayPath } from './path-display';
+import { formatDisplayPath, getPathFileName } from './path-display';
 import { initDragDrop } from './dragdrop';
 import { initHistory, pushHistory } from './history';
 import { initOutline, toggleOutline } from './outline';
@@ -49,6 +49,7 @@ if (import.meta.env.VITE_E2E === 'true') {
 
 window.addEventListener('DOMContentLoaded', async () => {
   initTheme();
+  initToolbar();
   initMenu();
   initSearch();
   initOutline();
@@ -136,6 +137,7 @@ function finishOpen(path: string, payload: DocumentPayload, options: OpenOptions
   if (options.pushNavigation !== false) pushHistory(path);
   updateDocumentMetadata(payload);
   renderFavorites();
+  syncFavoriteToggle();
 }
 
 async function addWorkspace(): Promise<void> {
@@ -183,7 +185,7 @@ function renderFavorites(): void {
     icon.setAttribute('aria-hidden', 'true');
     const label = document.createElement('span');
     label.className = 'recent-label';
-    label.textContent = path.split(/[\\/]/).pop() || path;
+    label.textContent = getPathFileName(path);
     item.append(icon, label);
     item.addEventListener('click', () => { void openPath(path, { recordRecent: true, pushNavigation: true }); });
     container.appendChild(item);
@@ -198,8 +200,31 @@ function toggleFavorite(): void {
     favorites: exists ? state.favorites.filter((path) => path !== activePath) : [activePath, ...state.favorites].slice(0, 100),
   });
   renderFavorites();
+  syncFavoriteToggle();
   const popup = document.getElementById('menu-popup');
   if (popup) buildMenuContent(popup);
+}
+
+function initToolbar(): void {
+  const addWorkspaceButton = document.getElementById('add-workspace-btn');
+  const favoriteButton = document.getElementById('favorite-toggle-btn');
+  addWorkspaceButton?.addEventListener('click', () => { void addWorkspace(); });
+  favoriteButton?.addEventListener('click', toggleFavorite);
+  syncFavoriteToggle();
+}
+
+function syncFavoriteToggle(): void {
+  const button = document.getElementById('favorite-toggle-btn') as HTMLButtonElement | null;
+  const icon = button?.querySelector('.toolbar-icon');
+  if (!button) return;
+
+  const isFavorite = Boolean(activePath && getAppState().favorites.includes(activePath));
+  button.disabled = !activePath;
+  button.classList.toggle('is-active', isFavorite);
+  button.setAttribute('aria-pressed', String(isFavorite));
+  button.setAttribute('aria-label', isFavorite ? '取消收藏当前文档' : '收藏当前文档');
+  button.title = isFavorite ? '取消收藏当前文档' : '收藏当前文档';
+  if (icon) icon.textContent = isFavorite ? '★' : '☆';
 }
 
 function initMenu(): void {
@@ -214,7 +239,9 @@ function initMenu(): void {
     event.stopPropagation();
     const open = popup.classList.toggle('hidden') === false;
     menuBtn.setAttribute('aria-expanded', String(open));
+    if (open) popup.querySelector<HTMLElement>('button:not(:disabled), summary')?.focus();
   });
+  popup.addEventListener('click', (event) => event.stopPropagation());
   document.addEventListener('click', () => hidePopup());
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') hidePopup();
@@ -223,37 +250,26 @@ function initMenu(): void {
 
 function buildMenuContent(popup: HTMLElement): void {
   popup.replaceChildren();
-  popup.setAttribute('role', 'menu');
-  popup.appendChild(createMenuItem('📁 添加文件夹', () => { void addWorkspace(); }));
-  popup.appendChild(createMenuItem('★ 收藏/取消收藏当前文档', toggleFavorite, !activePath));
-  popup.appendChild(createMenuItem('📂 在文件管理器中显示当前文档', () => { void revealCurrentDocument(); }, !activePath));
-  popup.appendChild(createMenuItem('☰ 显示/隐藏目录', () => toggleOutline()));
-  popup.appendChild(createMenuItem('🖨 打印 / 导出 PDF', exportToPdf));
+  popup.setAttribute('role', 'dialog');
+  popup.setAttribute('aria-label', '更多选项');
+
+  popup.appendChild(createMenuLabel('文档'));
+  popup.appendChild(createMenuItem('在文件管理器中显示', () => { void revealCurrentDocument(); }, !activePath));
+  popup.appendChild(createMenuItem('显示 / 隐藏目录', () => toggleOutline()));
+  popup.appendChild(createMenuItem('打印 / 导出 PDF', exportToPdf));
+
+  popup.appendChild(createMenuSeparator());
+  popup.appendChild(createMenuLabel('阅读'));
   popup.appendChild(createMenuItem(
-    areRemoteImagesAllowed() ? '🖼 禁止远程图片' : '🖼 允许远程图片',
+    areRemoteImagesAllowed() ? '禁止远程图片' : '允许远程图片',
     () => { void setRemoteImagesAllowed(!areRemoteImagesAllowed()).then(() => buildMenuContent(popup)); },
   ));
 
   popup.appendChild(createMenuSeparator());
-  popup.appendChild(createMenuLabel('主题'));
-  for (const option of getThemeOptions()) {
-    popup.appendChild(createMenuOption(option.label, option.value === getCurrentThemePreference(), () => {
-      setTheme(option.value);
-      buildMenuContent(popup);
-    }));
-  }
+  popup.appendChild(createAppearanceDisclosure());
 
   popup.appendChild(createMenuSeparator());
-  popup.appendChild(createMenuLabel('字体'));
-  for (const option of getFontOptions()) {
-    popup.appendChild(createMenuOption(option.label, option.value === getCurrentFont(), () => {
-      setFont(option.value);
-      buildMenuContent(popup);
-    }));
-  }
-
-  popup.appendChild(createMenuSeparator());
-  popup.appendChild(createMenuItem('🗑 清空最近文件', clearRecent));
+  popup.appendChild(createMenuItem('清空最近文件', clearRecent));
 }
 
 function createMenuItem(text: string, onClick: () => void, disabled = false): HTMLButtonElement {
@@ -262,7 +278,6 @@ function createMenuItem(text: string, onClick: () => void, disabled = false): HT
   item.className = 'menu-item';
   item.textContent = text;
   item.disabled = disabled;
-  item.setAttribute('role', 'menuitem');
   item.addEventListener('click', (event) => {
     event.stopPropagation();
     onClick();
@@ -274,9 +289,40 @@ function createMenuItem(text: string, onClick: () => void, disabled = false): HT
 function createMenuOption(text: string, active: boolean, onClick: () => void): HTMLButtonElement {
   const item = createMenuItem(`${active ? '✓ ' : ''}${text}`, onClick);
   item.classList.add('menu-option');
-  item.setAttribute('role', 'menuitemradio');
-  item.setAttribute('aria-checked', String(active));
+  item.setAttribute('aria-pressed', String(active));
   return item;
+}
+
+function createAppearanceDisclosure(): HTMLDetailsElement {
+  const disclosure = document.createElement('details');
+  disclosure.className = 'menu-disclosure';
+  const summary = document.createElement('summary');
+  summary.textContent = `外观 · ${getThemeOptions().find((option) => option.value === getCurrentThemePreference())?.label ?? '主题'} / ${getFontOptions().find((option) => option.value === getCurrentFont())?.label ?? '字体'}`;
+  disclosure.appendChild(summary);
+
+  const content = document.createElement('div');
+  content.className = 'menu-disclosure-content';
+  const themeLabel = createMenuLabel('主题');
+  themeLabel.classList.add('menu-disclosure-label');
+  content.appendChild(themeLabel);
+  for (const option of getThemeOptions()) {
+    content.appendChild(createMenuOption(option.label, option.value === getCurrentThemePreference(), () => {
+      setTheme(option.value);
+      buildMenuContent(document.getElementById('menu-popup') as HTMLElement);
+    }));
+  }
+
+  const fontLabel = createMenuLabel('字体');
+  fontLabel.classList.add('menu-disclosure-label');
+  content.appendChild(fontLabel);
+  for (const option of getFontOptions()) {
+    content.appendChild(createMenuOption(option.label, option.value === getCurrentFont(), () => {
+      setFont(option.value);
+      buildMenuContent(document.getElementById('menu-popup') as HTMLElement);
+    }));
+  }
+  disclosure.appendChild(content);
+  return disclosure;
 }
 
 function createMenuLabel(text: string): HTMLElement {
